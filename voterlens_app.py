@@ -20,9 +20,13 @@ Render deployment:
 """
 
 import os
-from flask import Flask, render_template_string
+import requests
+from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -1392,11 +1396,10 @@ async function sendMsg(){
     }, 1800);
 
     // ── API call ─────────────────────────────────────────────────────
-    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+    var resp = await fetch('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        model:      'claude-sonnet-4-20250514',
         max_tokens: 1200,
         system:     sys,
         messages:   msgs2
@@ -4182,6 +4185,44 @@ def index():
 @app.route("/healthz")
 def healthz():
     return "ok", 200
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    if not ANTHROPIC_API_KEY:
+        return jsonify({"error": "Server is missing the ANTHROPIC_API_KEY environment variable."}), 500
+
+    data = request.get_json(silent=True) or {}
+    system = data.get("system", "")
+    messages = data.get("messages", [])
+    try:
+        max_tokens = int(data.get("max_tokens", 1200))
+    except (TypeError, ValueError):
+        max_tokens = 1200
+    max_tokens = max(1, min(max_tokens, 2000))
+
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "messages is required and must be a non-empty list."}), 400
+
+    try:
+        upstream = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "content-type": "application/json",
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": ANTHROPIC_MODEL,
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": messages,
+            },
+            timeout=60,
+        )
+    except requests.RequestException as e:
+        return jsonify({"error": f"Upstream request to Anthropic failed: {e}"}), 502
+
+    return (upstream.content, upstream.status_code, {"Content-Type": "application/json"})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))

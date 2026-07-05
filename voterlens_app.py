@@ -26,7 +26,7 @@ from flask import Flask, render_template_string, request, jsonify
 app = Flask(__name__)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
